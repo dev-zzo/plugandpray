@@ -35,7 +35,7 @@ def log_debug(text):
     if __log_level > 0:
         print('[#] %s' % text)
 def log_text(text):
-    print('[ ] %s' % text)
+    print('    %s' % text)
 
 #
 # HTTP related code
@@ -229,6 +229,8 @@ class HttpClient(object):
         else:
             # Unknown transfer method
             pass
+        if body:
+            log_debug("HTTP: Received body:\n%s" % body)
         return (addr, status, headers, body)
 
     def _parse_headers(self, text):
@@ -500,7 +502,7 @@ class UpnpService(object):
         self.event_sub_url = None
 
     def __str__(self):
-        return 'Service %s (type %s)' % (self.id, self.type)
+        return 'Service %s (%s)' % (self.id, str(self.type_urn))
     __repr__ = __str__
 
     @staticmethod
@@ -522,6 +524,12 @@ class UpnpService(object):
                 o.events_url = child.text
         return o
 
+    def get_control_url(self):
+        control_url = self.control_url
+        if self._root.url_base is not None:
+            control_url = self._root.url_base + control_url
+        return control_url
+
     def get_descriptor(self):
         try:
             return self._descriptor
@@ -533,35 +541,7 @@ class UpnpService(object):
             return sd
         
     def invoke(self, action, **kwargs):
-        sd = self.get_descriptor()
-        
-        # Don't bother with XML tools...
-        args = ['<%s>%s</%s>' % (name, value, name) for name, value in kwargs.iteritems()]
-        body_text = '<u:%s xmlns:u="%s">%s</u:%s>' % (action, self.type_urn, ''.join(args), action)
-        xml = '<?xml version="1.0"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body>'+body_text+'</s:Body></s:Envelope>'
-        
-        control_url = self.control_url
-        if self._root.url_base is not None:
-            control_url = self._root.url_base + control_url
-        headers = {
-                'SOAPACTION': '"%s#%s"' % (self.type_urn, action),
-                'CONTENT-TYPE': 'text/xml; charset="utf-8"',
-            }
-        response_status, response_headers, response_body = http_post(control_url, headers, xml)
-        # TODO: check HTTP status code
-        xml = ElementTree.XML(response_body)
-        xml = xml[0][0]
-        root_tag = clean_tag(xml.tag)
-        if root_tag == action + 'Response':
-            args_out = {}
-            for node in xml:
-                tag = clean_tag(node.tag)
-                args_out[tag] = node.text
-            return args_out
-        elif root_tag == 'Fault':
-            raise UpnpError('Fault')
-        else:
-            raise UpnpError('Unknown tag')
+        return upnp_service_action(self.get_control_url(), self.type_urn, action, **kwargs)
 # End of UpnpService
 
 class UpnpDevice(object):
@@ -665,8 +645,7 @@ class UpnpRootDevice(UpnpDevice):
             return self.service_types[service_type]
         except KeyError:
             pass
-        if UPNP_DEBUG:
-            print('Getting SCPD')
+        log_debug('Getting SCPD')
         desc_text = http_get(scpd_url)[2]
         desc_xml = ElementTree.XML(desc_text)
         sd = UpnpServiceDescriptor.from_xml(desc_xml)
@@ -674,19 +653,48 @@ class UpnpRootDevice(UpnpDevice):
         return sd
 # End of UpnpRootDevice
 
+def upnp_print_service(root, indent=''):
+    log_text('%s%s' % (indent, root))
+    indent += '  '
+    log_text('%s%s' % (indent, root.get_control_url()))
+    sd = root.get_descriptor()
+    for an, a in sd.actions.iteritems():
+        log_text('%s-> %s' % (indent, a))
+
 def upnp_print_schema(root, indent=''):
-    print('%s%s' % (indent, root))
+    log_text('%s%s' % (indent, root))
     indent += '  '
     for s in root.services:
-        print('%s%s' % (indent, s))
-        sd = s.get_descriptor()
-        for an, a in sd.actions.iteritems():
-            print('%s-> %s' % (indent, a))
+        upnp_print_service(s, indent)
     for d in root.subdevices:
         upnp_print_schema(d, indent)
 
-def upnp_process_description(location):
-    print('Getting description...')
+def upnp_service_action(control_url, service_type, action, **kwargs):
+    args = ['<%s>%s</%s>' % (name, value, name) for name, value in kwargs.iteritems()]
+    body_text = '<u:%s xmlns:u="%s">%s</u:%s>' % (action, service_type, ''.join(args), action)
+    xml = '<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body>'+body_text+'</s:Body></s:Envelope>'
+    
+    headers = {
+            'SOAPACTION': '"%s#%s"' % (service_type, action),
+            'CONTENT-TYPE': 'text/xml; charset="utf-8"',
+        }
+    response_status, response_headers, response_body = http_post(control_url, headers, xml)
+    # TODO: check HTTP status code
+    xml = ElementTree.XML(response_body)
+    xml = xml[0][0]
+    root_tag = clean_tag(xml.tag)
+    if root_tag == action + 'Response':
+        args_out = {}
+        for node in xml:
+            tag = clean_tag(node.tag)
+            args_out[tag] = node.text
+        return args_out
+    elif root_tag == 'Fault':
+        raise UpnpError('Fault')
+    else:
+        raise UpnpError('Unknown tag')
+
+def upnp_process_descriptor(location):
     desc = http_get(location)
     desc_xml = ElementTree.XML(desc[2])
     # NOTE: Some device descriptors don't contain URL base.
@@ -694,24 +702,6 @@ def upnp_process_description(location):
     base_url = URL(location)
     base_url.path = ''
     return UpnpRootDevice.from_xml(desc_xml, str(base_url))
-
-def discovery_channel(bind_addr):
-    print('Searching for root devices...')
-    ssdp_results = ssdp_search_multi(bind_addr, 'upnp:rootdevice', timeout=3)
-    if not ssdp_results:
-        print('No devices found!')
-        return
-
-    devices = {}
-    for ssdp_result in ssdp_results:
-        print(ssdp_result)
-        device = upnp_process_description(ssdp_result.location)
-        upnp_print_schema(device)
-        #s = device.find_services('WANIPConnection:1')
-        #r = s[0].invoke('GetExternalIPAddress')
-
-#default_bind_addr = ('172.16.90.100', 2600)
-#discovery_channel(default_bind_addr)
 
 #
 # Commands implementation
@@ -733,7 +723,7 @@ def do_ssdp_multi(args):
         bind_ip = socket.gethostbyname(socket.gethostname())
         log_info('Will bind to %s.' % bind_ip)
     
-    log_info('Starting SSDP Discovery (multicast)')
+    log_info('Starting SSDP Discovery (multicast).')
     bind_addr = (bind_ip, args.bind_port)
     ssdp_results = ssdp_search_multi(bind_addr, args.search_type, timeout=args.timeout)
     log_info('SSDP responses: %d' % len(ssdp_results))
@@ -744,13 +734,39 @@ def do_ssdp_multi(args):
 def do_ssdp_uni(args):
     "Perform a SSDP unicast M-SEARCH"
 
-    log_info('Starting SSDP Discovery (unicast)')
+    log_info('Starting SSDP Discovery (unicast).')
     ssdp_result = ssdp_search_uni(args.target_ip, args.search_type, timeout=args.timeout)
     if ssdp_result:
         ssdp_response_printout(ssdp_result)
     else:
         log_error('No response from the target.')
     log_info('SSDP Discovery (unicast) completed.')
+
+def do_upnp_dump(args):
+    log_info('Starting UPnP descriptor dumping.')
+    root = upnp_process_descriptor(args.location)
+    upnp_print_schema(root)
+    log_info('UPnP descriptor dumping completed.')
+
+def do_upnp_action(args):
+    log_info('Starting UPnP action invocation.')
+    inputs = {}
+    for i in args.inputs:
+        name, sep, value = i.partition('=')
+        inputs[name] = value
+    try:
+        log_info('Performing SOAP call...')
+        outputs = upnp_service_action(args.control_url, args.service_type, args.action, **inputs)
+        if outputs:
+            log_info('Returned values:')
+            for p in outputs.iteritems():
+                log_text('%s = %s' % p)
+        else:
+            log_info('No values returned.')
+    except UpnpError as e:
+        log_error('Call failed.')
+        log_text(str(e))
+    log_info('UPnP action invocation completed.')
 
 #
 # Main code
@@ -779,7 +795,7 @@ if __name__ == '__main__':
         help='how long to wait for replies, seconds',
         type=int,
         default=2)
-    p.set_defaults(action=do_ssdp_multi)
+    p.set_defaults(handler=do_ssdp_multi)
     
     p = subparsers.add_parser('ssdp-uni', help='perform a SSDP unicast M-SEARCH')
     p.add_argument('target_ip',
@@ -792,14 +808,38 @@ if __name__ == '__main__':
         help='how long to wait for a reply, seconds',
         type=int,
         default=2)
-    p.set_defaults(action=do_ssdp_uni)
+    p.set_defaults(handler=do_ssdp_uni)
+    
+    p = subparsers.add_parser('upnp', help='perform a UPnP action')
+    ps = p.add_subparsers()
+    
+    pp = ps.add_parser('dump', help='dump device specification from location')
+    pp.add_argument('location',
+        help='XML descriptor location')
+    pp.set_defaults(handler=do_upnp_dump)
+    
+    pp = ps.add_parser('action', help='invoke a service action')
+    pp.add_argument('control_url',
+        help='control point URL',
+        metavar='control-url')
+    pp.add_argument('service_type',
+        help='UPnP service type',
+        metavar='control-url')
+    pp.add_argument('action',
+        help='action name')
+    pp.add_argument('inputs',
+        help='action arguments',
+        nargs='*')
+    pp.set_defaults(handler=do_upnp_action)
 
     args = parser.parse_args()
     if args.debug:
         __log_level = 1
 
+    log_text('')
     log_text('Plug and Pray -- UPnP script starting up.')
-    args.action(args)
+    log_text('')
+    args.handler(args)
     
-    log_text('Have a nice day.')
+    log_error('Have a nice day.')
 # EOF
