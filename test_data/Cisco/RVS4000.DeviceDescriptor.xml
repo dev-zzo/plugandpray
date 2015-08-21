@@ -1,0 +1,108 @@
+<?xml version="1.0"?>
+<root xmlns="urn:schemas-upnp-org:device-1-0">
+  <specVersion>
+    <major>1</major>
+    <minor>0</minor>
+  </specVersion>
+  <URLBase>http://172.16.90.254:49152</URLBase>
+  <device>
+    <deviceType>urn:schemas-upnp-org:device:InternetGatewayDevice:1</deviceType>
+    <friendlyName>Cisco VPN Router</friendlyName>
+    <manufacturer>Cisco Systems.</manufacturer>
+    <manufacturerURL>http://www.cisco.com</manufacturerURL>
+    <modelDescription>Cisco VPN Router</modelDescription>
+    <modelName>4-Port Gigabit Security Router with VPN</modelName>
+    <modelNumber>RVS4000</modelNumber>
+    <modelURL>http://www.cisco.com</modelURL>
+    <serialNumber>123456789</serialNumber>
+    <UDN>uuid:21dd144e-1dd2-11b2-baca-e05fb90c3793</UDN>
+    <UPC>RVS4000</UPC>
+    <serviceList>
+      <service>
+        <serviceType>urn:schemas-upnp-org:service:Layer3Forwarding:1</serviceType>
+        <serviceId>urn:upnp-org:serviceId:L3Forwarding1</serviceId>
+        <controlURL>/upnp/control/L3Forwarding1</controlURL>
+        <eventSubURL>/upnp/event/L3Forwarding1</eventSubURL>
+        <SCPDURL>/l3frwd.xml</SCPDURL>
+      </service>
+    </serviceList>
+    <deviceList>
+      <device>
+        <deviceType>urn:schemas-upnp-org:device:WANDevice:1</deviceType>
+        <friendlyName>WANDevice</friendlyName>
+        <manufacturer>Cisco Systems.</manufacturer>
+        <manufacturerURL>http://www.cisco.com/</manufacturerURL>
+        <modelDescription>Residential Gateway</modelDescription>
+        <modelName>Internet Connection Sharing</modelName>
+        <modelNumber>1</modelNumber>
+        <modelURL>http://www.cisco.com/</modelURL>
+        <serialNumber>0000001</serialNumber>
+        <UDN>uuid:21da5cfe-1dd2-11b2-baca-e05fb90c3793</UDN>
+        <UPC>RVS4000</UPC>
+        <serviceList>
+          <service>
+            <serviceType>urn:schemas-upnp-org:service:WANCommonInterfaceConfig:1</serviceType>
+            <serviceId>urn:upnp-org:serviceId:WANCommonIFC1</serviceId>
+            <controlURL>/upnp/control/WANCommonIFC1</controlURL>
+            <eventSubURL>/upnp/event/WANCommonIFC1</eventSubURL>
+            <SCPDURL>/cmnicfg.xml</SCPDURL>
+          </service>
+        </serviceList>
+        <deviceList>
+          <device>
+            <deviceType>urn:schemas-upnp-org:device:WANConnectionDevice:1</deviceType>
+            <friendlyName>WANConnectionDevice</friendlyName>
+            <manufacturer>Cisco Systems.</manufacturer>
+            <manufacturerURL>http://www.cisco.com/</manufacturerURL>
+            <modelDescription>Residential Gateway</modelDescription>
+            <modelName>Internet Connection Sharing</modelName>
+            <modelNumber>1</modelNumber>
+            <modelURL>http://www.cisco.com/</modelURL>
+            <serialNumber>0000001</serialNumber>
+            <UDN>uuid:21d7a6f8-1dd2-11b2-a4d7-e05fb90c3793</UDN>
+            <UPC>RVS4000</UPC>
+            <serviceList>
+              <service>
+                <serviceType>urn:schemas-upnp-org:service:WANEthernetLinkConfig:1</serviceType>
+                <serviceId>urn:upnp-org:serviceId:WANEthLinkC1</serviceId>
+                <controlURL>/upnp/control/WANEthLinkC1</controlURL>
+                <eventSubURL>/upnp/event/WANEthLinkC1</eventSubURL>
+                <SCPDURL>/wanelcfg.xml</SCPDURL>
+              </service>
+              <service>
+                <serviceType>urn:schemas-upnp-org:service:WANIPConnection:1</serviceType>
+                <serviceId>urn:upnp-org:serviceId:WANIPConn1</serviceId>
+                <controlURL>/upnp/control/WANIPConn1</controlURL>
+                <eventSubURL>/upnp/event/WANIPConn1</eventSubURL>
+                <SCPDURL>/ipcfg.xml</SCPDURL>
+              </service>
+            </serviceList>
+          </device>
+        </deviceList>
+      </device>
+      <device>
+        <deviceType>urn:schemas-upnp-org:device:LANDevice:1</deviceType>
+        <friendlyName>LANDevice</friendlyName>
+        <manufacturer>Cisco Systems.</manufacturer>
+        <manufacturerURL>http://www.cisco.com/</manufacturerURL>
+        <modelDescription>Residential Gateway</modelDescription>
+        <modelName>Residential Gateway</modelName>
+        <modelNumber>1</modelNumber>
+        <modelURL>http://www.cisco.com/</modelURL>
+        <serialNumber>0000001</serialNumber>
+        <UDN>uuid:21d49a08-1dd2-11b2-b477-e05fb90c3792</UDN>
+        <UPC>RVS4000</UPC>
+        <serviceList>
+          <service>
+            <serviceType>urn:schemas-upnp-org:service:LANHostConfigManagement:1</serviceType>
+            <serviceId>urn:upnp-org:serviceId:LANHostCfg1</serviceId>
+            <controlURL>/upnp/control/LANHostCfg1</controlURL>
+            <eventSubURL>/upnp/event/LANHostCfg1</eventSubURL>
+            <SCPDURL>/lanhostc.xml</SCPDURL>
+          </service>
+        </serviceList>
+      </device>
+    </deviceList>
+    <presentationURL>http://172.16.90.254/index.htm</presentationURL>
+  </device>
+</root>
