@@ -1,3 +1,4 @@
+import argparse
 import sys
 import socket
 import struct
@@ -19,10 +20,26 @@ ElementTree.register_namespace('service', UPNP_SERVICE_NS)
 ElementTree.register_namespace('control', UPNP_CONTROL_NS)
 
 #
-# HTTP related code
+# Logging stubs
 #
 
-HTTP_DEBUG = True
+__log_level = 0
+def log_error(text):
+    print('[X] %s' % text)
+def log_warn(text):
+    print('[!] %s' % text)
+def log_info(text):
+    print('[.] %s' % text)
+def log_debug(text):
+    global __log_level
+    if __log_level > 0:
+        print('[#] %s' % text)
+def log_text(text):
+    print('[ ] %s' % text)
+
+#
+# HTTP related code
+#
 
 class HttpTransport(object):
     "Implements a base class for HTTP transport protocols"
@@ -38,9 +55,7 @@ class HttpTransport(object):
     def recv(self):
         return self.s.recvfrom(65536)
     def close(self):
-        global HTTP_DEBUG
-        if HTTP_DEBUG:
-            print('Closing socket')
+        log_debug('HTTP: Closing socket.')
         self.s.close()
         self.s = None
 
@@ -48,11 +63,9 @@ class HttpTcpTransport(HttpTransport):
     "Implements HTTP over TCP"
 
     def __init__(self, remote_addr, timeout=5):
-        global HTTP_DEBUG
         HttpTransport.__init__(self, socket.SOCK_STREAM, socket.IPPROTO_TCP, timeout)
         self.remote_addr = remote_addr
-        if HTTP_DEBUG:
-            print('Connecting to %s:%d.' % remote_addr)
+        log_debug('HTTP/TCP: Connecting to %s:%d.' % remote_addr)
         self.s.connect(remote_addr)
     def send(self, data):
         self.s.send(data)
@@ -75,19 +88,16 @@ class HttpUdpUnicastTransport(HttpUdpTransport):
 class HttpUdpMulticastTransport(HttpUdpTransport):
     "Implements HTTP over multicast UDP"
 
-    def __init__(self, remote_addr, bind_addr, mcast_ip, timeout=5):
+    def __init__(self, remote_addr, bind_addr, timeout=5):
         """Initialise the transport.
         
         remote_addr: remote endpoint address (as in socket address)
         bind_addr: local address to bind to (as in socket address)
-        mcast_ip: multicast group IP address (typically same as in remote_addr)
         """
         HttpUdpTransport.__init__(self, remote_addr, timeout)
-        #self.s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.s.bind(bind_addr)
         self.s.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 32)
-        self.s.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_IF, socket.inet_aton(bind_addr[0]))
-        mreq = socket.inet_aton(mcast_ip) + socket.inet_aton(bind_addr[0])
+        mreq = socket.inet_aton(remote_addr[0]) + socket.inet_aton(bind_addr[0])
         self.s.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
     def is_multicast(self):
         return True
@@ -133,8 +143,6 @@ class HttpClient(object):
         * Unicast transport: a tuple (status, headers, body)
         * Multicast transport: a list of tuples (addr, status, headers, body)
         """
-        global HTTP_DEBUG
-        
         request_lines = [ '%s %s HTTP/%s' % (method, url, self.http_version) ]
         has_host = False
         if headers:
@@ -148,14 +156,10 @@ class HttpClient(object):
             request_lines.append('CONTENT-LENGTH: %d' % len(body))
         request_lines.append('\r\n')
         headers_text = '\r\n'.join(request_lines)
-        if HTTP_DEBUG:
-            print('Sending headers:')
-            print(headers_text)
+        log_debug("HTTP: Sending headers:\n%s" % headers_text)
         self._tr.send(headers_text)
         if body:
-            if HTTP_DEBUG:
-                print('Sending body (%d bytes)' % len(body))
-                print(body)
+            log_debug("HTTP: Sending body (%d bytes):\n%s" % (len(body), body))
             self._tr.send(body)
 
         if self._tr.is_multicast():
@@ -173,8 +177,6 @@ class HttpClient(object):
     def _do_recv(self):
         "Internal routine. Performs response reception."
 
-        global HTTP_DEBUG
-        
         response = ''
         end_of_headers = -1
         while end_of_headers < 0:
@@ -185,22 +187,20 @@ class HttpClient(object):
                 end_of_headers = response.find("\n\n")
         body = response[end_of_headers + 4:]
         headers = response[:end_of_headers + 4]
-        if HTTP_DEBUG:
-            print('Received headers:')
-            print(headers)
+        log_debug("HTTP: Received headers:\n%s" % headers)
         status, headers = self._parse_headers(headers)
         
         if 'CONTENT-LENGTH' in headers:
+            log_debug("HTTP: Content-Length given")
             content_length = int(headers['CONTENT-LENGTH']) - len(body)
             while content_length > 0:
                 frag, addr = self._tr.recv()
                 body += frag
                 content_length -= len(frag)
         elif 'TRANSFER-ENCODING' in headers and headers['TRANSFER-ENCODING'].lower() == 'chunked':
+            log_debug("HTTP: Transfer-Encoding(chunked) given")
             buffer = body
             body = ''
-            if HTTP_DEBUG:
-                print('Starting chunked RX')
             while True:
                 buffer_offset = 0
                 while buffer.find("\n") == -1:
@@ -213,8 +213,6 @@ class HttpClient(object):
                 elif buffer_offset == 1 and buffer[0] == "\r":
                     buffer = buffer[2:]
                     continue
-                if HTTP_DEBUG:
-                    print("Buffer offset: %d" % buffer_offset)
                 if buffer[buffer_offset - 1] == "\r":
                     chunk_len = buffer[:buffer_offset - 1]
                 else:
@@ -223,9 +221,6 @@ class HttpClient(object):
                 if chunk_len == "0":
                     break
                 chunk_len = int(chunk_len, 16)
-                if HTTP_DEBUG:
-                    print("Chunk length: %d" % chunk_len)
-                    print("Buffer length: %d" % len(buffer))
                 while len(buffer) - buffer_offset < chunk_len:
                     frag, addr = self._tr.recv()
                     buffer += frag
@@ -390,19 +385,21 @@ def ssdp_search(transport, search_type):
 
 def ssdp_search_uni(target_ip, search_type, timeout=5):
     "Perform a unicast SSDP M-SEARCH request"
-    
+
     target_addr = (target_ip, SSDP_PORT)
     tr = HttpUdpUnicastTransport(target_addr, timeout)
-    rsp = ssdp_search(tr, search_type)
-    return SsdpSearchResult(target_ip, rsp[1])
+    try:
+        rsp = ssdp_search(tr, search_type)
+        return SsdpSearchResult(target_ip, rsp[1])
+    except socket.timeout:
+        return None
 
 def ssdp_search_multi(bind_addr, search_type, timeout=5):
     "Perform a multicast SSDP M-SEARCH request"
-    
+
     tr = HttpUdpMulticastTransport(
         (SSDP_MULTICAST_IPv4, SSDP_PORT),
         bind_addr,
-        SSDP_MULTICAST_IPv4,
         timeout)
     results = []
     for rsp in ssdp_search(tr, search_type):
@@ -713,13 +710,89 @@ def discovery_channel(bind_addr):
         #s = device.find_services('WANIPConnection:1')
         #r = s[0].invoke('GetExternalIPAddress')
 
-default_bind_addr = ('192.168.1.55', 2600)
-discovery_channel(default_bind_addr)
+#default_bind_addr = ('172.16.90.100', 2600)
+#discovery_channel(default_bind_addr)
 
-#print ssdp_search_uni(sys.argv[1], 'upnp:rootdevice')
+#
+# Commands implementation
+#
 
-#desc_xml = ElementTree.parse('gateway.xml')
-#r = UpnpRootDevice.from_xml(desc_xml)
-#print r
-#print r.services
-#print r.subdevices
+def ssdp_response_printout(r):
+    log_info('SSDP response from %s:' % r.ipaddr)
+    log_text('Server ver: %s' % r.server)
+    log_text('Location: %s' % r.location)
+    log_text('Search type: %s' % r.search_type)
+    log_text('USN: %s' % r.usn)
+
+def do_ssdp_multi(args):
+    "Perform a SSDP multicast M-SEARCH"
+
+    bind_ip = args.bind_ip4
+    if bind_ip is None:
+        log_warn('No bind address is given, will try to guess.')
+        bind_ip = socket.gethostbyname(socket.gethostname())
+        log_info('Will bind to %s.' % bind_ip)
+    
+    log_info('Starting SSDP Discovery (multicast)')
+    bind_addr = (bind_ip, args.bind_port)
+    ssdp_results = ssdp_search_multi(bind_addr, args.search_type, timeout=args.timeout)
+    log_info('SSDP responses: %d' % len(ssdp_results))
+    for r in ssdp_results:
+        ssdp_response_printout(r)
+    log_info('SSDP Discovery (multicast) completed.')
+
+def do_ssdp_uni(args):
+    "Perform a SSDP unicast M-SEARCH"
+
+    log_info('Starting SSDP Discovery (unicast)')
+    ssdp_result = ssdp_search_uni(args.target_ip, args.search_type, timeout=args.timeout)
+    if ssdp_result:
+        ssdp_response_printout(ssdp_result)
+    else:
+        log_error('No response from the target.')
+    log_info('SSDP Discovery (unicast) completed.')
+
+#
+# Main code
+#
+
+if __name__ == '__main__':
+    log_text('Plug and Pray -- UPnP script starting up.')
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers()
+    
+    p = subparsers.add_parser('ssdp-multi', help='perform a SSDP multicast M-SEARCH')
+    p.add_argument('--bind-ip4',
+        help='IPv4 local address to bind to',
+        default=None)
+    p.add_argument('--bind-port',
+        help='UDP port number to bind to',
+        type=int,
+        default=2600)
+    p.add_argument('--search-type',
+        help='Search type to perform',
+        default='upnp:rootdevice')
+    p.add_argument('--timeout',
+        help='How long to wait for the replies',
+        type=int,
+        default=2)
+    p.set_defaults(action=do_ssdp_multi)
+    
+    p = subparsers.add_parser('ssdp-uni', help='perform a SSDP unicast M-SEARCH')
+    p.add_argument('target_ip',
+        help='IPv4 remote address',
+        metavar='target-ip')
+    p.add_argument('--search-type',
+        help='Search type to perform',
+        default='upnp:rootdevice')
+    p.add_argument('--timeout',
+        help='How long to wait for the replies',
+        type=int,
+        default=2)
+    p.set_defaults(action=do_ssdp_uni)
+
+    args = parser.parse_args()
+    args.action(args)
+    
+    log_text('Have a nice day.')
+# EOF
