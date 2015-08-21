@@ -681,7 +681,7 @@ def upnp_print_schema(root, indent=''):
         print('%s%s' % (indent, s))
         sd = s.get_descriptor()
         for an, a in sd.actions.iteritems():
-            print('%s->%s' % (indent, a))
+            print('%s-> %s' % (indent, a))
     for d in root.subdevices:
         upnp_print_schema(d, indent)
 
@@ -757,8 +757,11 @@ def do_ssdp_uni(args):
 #
 
 if __name__ == '__main__':
-    log_text('Plug and Pray -- UPnP script starting up.')
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Your UPnP pwnage tool")
+    parser.add_argument('--debug',
+        help='enable debugging of this script',
+        action='store_true')
+
     subparsers = parser.add_subparsers()
     
     p = subparsers.add_parser('ssdp-multi', help='perform a SSDP multicast M-SEARCH')
@@ -770,10 +773,10 @@ if __name__ == '__main__':
         type=int,
         default=2600)
     p.add_argument('--search-type',
-        help='Search type to perform',
+        help='search type to perform',
         default='upnp:rootdevice')
     p.add_argument('--timeout',
-        help='How long to wait for the replies',
+        help='how long to wait for replies, seconds',
         type=int,
         default=2)
     p.set_defaults(action=do_ssdp_multi)
@@ -783,15 +786,19 @@ if __name__ == '__main__':
         help='IPv4 remote address',
         metavar='target-ip')
     p.add_argument('--search-type',
-        help='Search type to perform',
+        help='search type to perform (eg: upnp:rootdevice)',
         default='upnp:rootdevice')
     p.add_argument('--timeout',
-        help='How long to wait for the replies',
+        help='how long to wait for a reply, seconds',
         type=int,
         default=2)
     p.set_defaults(action=do_ssdp_uni)
 
     args = parser.parse_args()
+    if args.debug:
+        __log_level = 1
+
+    log_text('Plug and Pray -- UPnP script starting up.')
     args.action(args)
     
     log_text('Have a nice day.')
