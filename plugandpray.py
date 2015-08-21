@@ -502,7 +502,7 @@ class UpnpService(object):
         self.event_sub_url = None
 
     def __str__(self):
-        return 'Service %s (%s)' % (self.id, str(self.type_urn))
+        return 'Service %s (%s)' % (self.id, self.type_urn)
     __repr__ = __str__
 
     @staticmethod
@@ -556,7 +556,7 @@ class UpnpDevice(object):
         self.subdevices = []
 
     def __str__(self):
-        return 'Device %s (type %s)' % (self.name, self.type)
+        return 'Device %s (%s)' % (self.name, self.type_urn)
     __repr__ = __str__
 
     @staticmethod
@@ -603,7 +603,7 @@ class UpnpRootDevice(UpnpDevice):
         self.service_types = {}
 
     def __str__(self):
-        return 'Device %s (type %s)' % (self.name, self.type)
+        return 'Device %s (%s)' % (self.name, self.type_urn)
     __repr__ = __str__
 
     @staticmethod
