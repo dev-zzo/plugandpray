@@ -343,10 +343,16 @@ class URN(object):
 def http_get(url, headers=None):
     "Shortcut for GETting a URL via HTTP/TCP"
     url = URL(url)
+    domain = url.domain
     port = url.port
     if not port:
         port = 80
-    return HttpClient(HttpTcpTransport((url.domain, port))).request('GET', url.path, headers)
+    path = url.path
+    if not path:
+        path = '/'
+    if url.query:
+        path += '?' + url.query
+    return HttpClient(HttpTcpTransport((url.domain, port))).request('GET', path, headers)
 
 def http_post(url, headers=None, body=None):
     "Shortcut for POSTting to a URL via HTTP/TCP"
@@ -701,6 +707,8 @@ def upnp_process_descriptor(location):
     # Use location as base, then.
     base_url = URL(location)
     base_url.path = ''
+    base_url.query = None
+    base_url.frag = None
     return UpnpRootDevice.from_xml(desc_xml, str(base_url))
 
 #
