@@ -75,9 +75,11 @@ class HttpTcpTransport(HttpTransport):
 class HttpUdpTransport(HttpTransport):
     "Implements HTTP over (unicast) UDP"
 
-    def __init__(self, remote_addr, timeout=5):
+    def __init__(self, remote_addr, bind_addr=None, timeout=5):
         HttpTransport.__init__(self, socket.SOCK_DGRAM, socket.IPPROTO_UDP, timeout)
         self.remote_addr = remote_addr
+        if bind_addr:
+            self.s.bind(bind_addr)
     def send(self, data):
         self.s.sendto(data, self.remote_addr)
 
@@ -95,7 +97,6 @@ class HttpUdpMulticastTransport(HttpUdpTransport):
         bind_addr: local address to bind to (as in socket address)
         """
         HttpUdpTransport.__init__(self, remote_addr, timeout)
-        self.s.bind(bind_addr)
         self.s.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 32)
         mreq = socket.inet_aton(remote_addr[0]) + socket.inet_aton(bind_addr[0])
         self.s.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
@@ -391,18 +392,18 @@ def ssdp_search(transport, search_type):
             'MX': 1,
         })
 
-def ssdp_search_uni(target_ip, search_type, timeout=5):
+def ssdp_search_uni(search_type, target_ip, bind_addr=None, timeout=5):
     "Perform a unicast SSDP M-SEARCH request"
 
     target_addr = (target_ip, SSDP_PORT)
-    tr = HttpUdpUnicastTransport(target_addr, timeout)
+    tr = HttpUdpUnicastTransport(target_addr, bind_addr, timeout)
     try:
         rsp = ssdp_search(tr, search_type)
         return SsdpSearchResult(target_ip, rsp[1])
     except socket.timeout:
         return None
 
-def ssdp_search_multi(bind_addr, search_type, timeout=5):
+def ssdp_search_multi(search_type, bind_addr, timeout=5):
     "Perform a multicast SSDP M-SEARCH request"
 
     tr = HttpUdpMulticastTransport(
@@ -734,15 +735,15 @@ def ssdp_response_printout(r):
 def do_ssdp_multi(args):
     "Perform a SSDP multicast M-SEARCH"
 
+    log_info('Starting SSDP Discovery (multicast).')
     bind_ip = args.bind_ip4
     if bind_ip is None:
         log_warn('No bind address is given, will try to guess.')
         bind_ip = socket.gethostbyname(socket.gethostname())
         log_info('Will bind to %s.' % bind_ip)
     
-    log_info('Starting SSDP Discovery (multicast).')
     bind_addr = (bind_ip, args.bind_port)
-    ssdp_results = ssdp_search_multi(bind_addr, args.search_type, timeout=args.timeout)
+    ssdp_results = ssdp_search_multi(args.search_type, bind_addr, timeout=args.timeout)
     log_info('SSDP responses: %d' % len(ssdp_results))
     for r in ssdp_results:
         ssdp_response_printout(r)
@@ -752,7 +753,13 @@ def do_ssdp_uni(args):
     "Perform a SSDP unicast M-SEARCH"
 
     log_info('Starting SSDP Discovery (unicast).')
-    ssdp_result = ssdp_search_uni(args.target_ip, args.search_type, timeout=args.timeout)
+    if args.bind_ip4 is None:
+        bind_addr = None
+    else:
+        bind_addr = (args.bind_ip4, args.bind_port)
+        log_info('Will bind to %s:%d.' % bind_addr)
+
+    ssdp_result = ssdp_search_uni(args.search_type, args.target_ip, bind_addr=bind_addr, timeout=args.timeout)
     if ssdp_result:
         ssdp_response_printout(ssdp_result)
     else:
@@ -814,6 +821,13 @@ if __name__ == '__main__':
     p.set_defaults(handler=do_ssdp_multi)
     
     p = subparsers.add_parser('ssdp-uni', help='perform a SSDP unicast M-SEARCH')
+    p.add_argument('--bind-ip4',
+        help='IPv4 local address to bind to',
+        default=None)
+    p.add_argument('--bind-port',
+        help='UDP port number to bind to',
+        type=int,
+        default=2600)
     p.add_argument('target_ip',
         help='IPv4 remote address',
         metavar='target-ip')
