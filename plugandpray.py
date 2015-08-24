@@ -740,9 +740,9 @@ def do_ssdp_multi(args):
     if bind_ip is None:
         log_warn('No bind address is given, will try to guess.')
         bind_ip = socket.gethostbyname(socket.gethostname())
-        log_info('Will bind to %s.' % bind_ip)
     
     bind_addr = (bind_ip, args.bind_port)
+    log_info('Will bind to %s:%d.' % bind_addr)
     ssdp_results = ssdp_search_multi(args.search_type, bind_addr, timeout=args.timeout)
     log_info('SSDP responses: %d' % len(ssdp_results))
     for r in ssdp_results:
