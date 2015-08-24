@@ -675,6 +675,15 @@ def upnp_print_schema(root, indent=''):
     for d in root.subdevices:
         upnp_print_schema(d, indent)
 
+def _get_error_description(xml):
+    if clean_tag(xml.tag) == 'errorDescription':
+        return xml.text
+    for x in xml:
+        r = _get_error_description(x)
+        if r:
+            return r
+    return None
+
 def upnp_service_action(control_url, service_type, action, **kwargs):
     args = ['<%s>%s</%s>' % (name, value, name) for name, value in kwargs.iteritems()]
     body_text = '<u:%s xmlns:u="%s">%s</u:%s>' % (action, service_type, ''.join(args), action)
@@ -696,7 +705,7 @@ def upnp_service_action(control_url, service_type, action, **kwargs):
             args_out[tag] = node.text
         return args_out
     elif root_tag == 'Fault':
-        raise UpnpError('Fault')
+        raise UpnpError(_get_error_description(xml))
     else:
         raise UpnpError('Unknown tag')
 
@@ -772,8 +781,7 @@ def do_upnp_action(args):
         else:
             log_info('No values returned.')
     except UpnpError as e:
-        log_error('Call failed.')
-        log_text(str(e))
+        log_error('Call failed: %s.' % str(e))
     log_info('UPnP action invocation completed.')
 
 #
